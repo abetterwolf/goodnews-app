@@ -151,4 +151,159 @@ function DesktopSidebar({ screen, onNavigate, user, onLogout, onGrace }: {
 }
 
 function AppInner() {
-  const { 
+  const { user, loading } = useAuth();
+  const { markActivity } = useStreak();
+  const [showSplash, setShowSplash] = useState(true);
+  const [screen, setScreen] = useState<Screen>('home');
+  const [showGrace, setShowGrace] = useState(false);
+  const [screenData, setScreenData] = useState<any>(null);
+
+  useEffect(() => {
+    seedDefaultAds();
+    const timer = setTimeout(() => setShowSplash(false), 1800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const navigate = (s: string, data?: any) => {
+    setScreenData(data);
+    setScreen(s as Screen);
+  };
+
+  const handleLogout = () => {
+    clearLocalUser();
+    window.location.reload();
+  };
+
+  if (showSplash || loading) {
+    return (
+      <AnimatePresence>
+        {(showSplash || loading) && <SplashScreen key="splash" />}
+      </AnimatePresence>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen lg:flex lg:items-center lg:justify-center lg:bg-muted/30 lg:p-8">
+        <div className="lg:w-full lg:max-w-md lg:rounded-3xl lg:shadow-2xl lg:overflow-hidden">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <LoginScreen onLogin={() => setScreen('home')} />
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  const mainContent = (
+    <AnimatePresence mode="wait">
+      {screen === 'home' && (
+        <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <HomeScreen onNavigate={navigate} />
+        </motion.div>
+      )}
+      {screen === 'send_goodnews' && (
+        <motion.div key="send" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}>
+          <SendGoodNewsScreen
+            initialScripture={screenData as ScriptureEntry | undefined}
+            onBack={() => setScreen('home')}
+            onSuccess={() => { markActivity(); setScreen('home'); }}
+          />
+        </motion.div>
+      )}
+      {screen === 'wall' && (
+        <motion.div key="wall" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}>
+          <WallScreen onBack={() => setScreen('home')} />
+        </motion.div>
+      )}
+      {screen === 'friends' && (
+        <motion.div key="friends" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}>
+          <FriendsScreen
+            onBack={() => setScreen('home')}
+            onSendGoodNews={(friend) => navigate('send_goodnews', { preselectedFriend: friend })}
+          />
+        </motion.div>
+      )}
+      {screen === 'profile' && (
+        <motion.div key="profile" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}>
+          <ProfileScreen
+            onBack={() => setScreen('home')}
+            onAdmin={() => setScreen('admin')}
+            onLogout={handleLogout}
+          />
+        </motion.div>
+      )}
+      {screen === 'admin' && (
+        <motion.div key="admin" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}>
+          <AdminScreen onBack={() => setScreen('profile')} />
+        </motion.div>
+      )}
+      {screen === 'devotional' && screenData && (
+        <motion.div key="devotional" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}>
+          <DevotionalScreen
+            goodNews={screenData}
+            onBack={() => setScreen('home')}
+            onComplete={() => setScreen('home')}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  return (
+    <>
+      {/* Mobile layout */}
+      <div className="lg:hidden mobile-container bg-background">
+        <div className="h-dvh overflow-y-auto overscroll-none">
+          {mainContent}
+        </div>
+        <BottomNav activeScreen={screen} onNavigate={navigate} onGrace={() => setShowGrace(true)} />
+      </div>
+
+      {/* Desktop layout */}
+      <div className="hidden lg:flex min-h-screen bg-background">
+        <DesktopSidebar
+          screen={screen}
+          onNavigate={navigate}
+          user={user}
+          onLogout={handleLogout}
+          onGrace={() => setShowGrace(true)}
+        />
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl xl:max-w-3xl mx-auto py-8 px-6">
+            {mainContent}
+          </div>
+        </main>
+      </div>
+
+      {/* Grace Chat (shared across layouts) */}
+      <AnimatePresence>
+        {showGrace && (
+          <GraceChatScreen
+            key="grace"
+            onClose={() => setShowGrace(false)}
+            onShareScripture={(scripture: ScriptureEntry) => {
+              setShowGrace(false);
+              navigate('send_goodnews', scripture);
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+export default function App() {
+  // Check for public share link — render without auth
+  const params = new URLSearchParams(window.location.search);
+  const shareId = params.get('share');
+  const shareData = params.get('d');
+  if (shareId) {
+    return <SharePage entryId={shareId} encodedData={shareData} />;
+  }
+
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
+  );
+}
